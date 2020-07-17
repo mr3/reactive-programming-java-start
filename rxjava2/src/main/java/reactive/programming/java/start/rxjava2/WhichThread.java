@@ -19,24 +19,33 @@ public class WhichThread {
     public static void main(String[] args) throws Exception {
         WhichThread instance = new WhichThread();
 
-        // getFuture execute on main thread
+        // fromFuture(main) - subscribe(cache)
         Single.fromFuture(instance.fromFuture()).subscribeOn(Schedulers.io()).subscribe(instance::subscribe);
 
         TimeUnit.MILLISECONDS.sleep(100);
 
-        // getSingle execute on cache Thread
-        Single.just(instance.getString()).compose(instance::getSingle).subscribeOn(Schedulers.io()).subscribe(instance::subscribe);
+        // just(main) - compose(main/cache) - subscribe(cache)
+        Single.just(instance.getString()).compose(instance::getSingle).subscribeOn(Schedulers.io())
+            .subscribe(instance::subscribe);
 
         TimeUnit.MILLISECONDS.sleep(100);
 
-        // fromCallable execute on cache Thread
+        // just(main) - flatMap(cache/new[if switch thread]) - map(new) - subscribe(new)
+        Single.just(instance.getString()).flatMap(instance::flatMap).subscribeOn(Schedulers.io()).map(item -> {
+            System.out.printf("map + %s run on thread: %s%n", item, Thread.currentThread().getName());
+            return item;
+        }).observeOn(Schedulers.io()).subscribe(instance::subscribe);
+
+        TimeUnit.MILLISECONDS.sleep(100);
+
+        // fromCallable(cache) - subscribe(cache)
         Single.fromCallable(instance::fromCallable).subscribeOn(Schedulers.io()).subscribe(instance::subscribe);
 
         TimeUnit.MILLISECONDS.sleep(100);
     }
 
     Consumer<Void> subscribe(String value) {
-        System.out.println(value + " subscribe " + Thread.currentThread().getName());
+        System.out.printf("subscribe run on %s%n", Thread.currentThread().getName());
         System.out.println("----------------------------------------");
 
         return s -> {
@@ -44,31 +53,40 @@ public class WhichThread {
     }
 
     private String getString() {
-        System.out.printf("getString I am on %s Thread%n", Thread.currentThread().getName());
+        System.out.printf("getString run on thread: %s%n", Thread.currentThread().getName());
         return "getString";
     }
 
     private Single<String> getSingle(Single<String> string) {
-        System.out.printf("getSingle I am on %s Thread%n", Thread.currentThread().getName());
+        System.out.printf("getSingle1 run on thread: %s%n", Thread.currentThread().getName());
 
         return string.map(item -> {
-            System.out.printf("getSingle I am on %s Thread%n", Thread.currentThread().getName());
-            return "getSingle";
+            System.out.printf("getSingle2 run on thread: %s%n", Thread.currentThread().getName());
+            return "getSingle3";
         });
     }
 
     private ListenableFuture<String> fromFuture() {
-        System.out.printf("fromFuture I am on %s Thread%n", Thread.currentThread().getName());
+        System.out.printf("fromFuture1 run on thread: %s%n", Thread.currentThread().getName());
 
         return Futures.submit(() -> {
-            System.out.printf("fromFuture I am on %s Thread%n", Thread.currentThread().getName());
-            return "fromFuture";
+            System.out.printf("fromFuture2 run on thread: %s%n", Thread.currentThread().getName());
+            return "fromFuture3";
         }, Executors.newCachedThreadPool());
     }
 
     private String fromCallable() {
-        System.out.printf("fromCallable I am on %s Thread%n", Thread.currentThread().getName());
-        return "fromCallable";
+        System.out.printf("fromCallable1 run on thread: %s%n", Thread.currentThread().getName());
+        return "fromCallable2";
+    }
+
+    private Single<String> flatMap(String value) {
+        System.out.printf("flatMap1 run on thread: %s%n", Thread.currentThread().getName());
+
+        return Single.just(value).subscribeOn(Schedulers.newThread()).map(item -> {
+            System.out.printf("flatMap2 run on thread: %s%n", Thread.currentThread().getName());
+            return "flatMap3";
+        });
     }
 
 }
