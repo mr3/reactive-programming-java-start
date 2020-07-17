@@ -30,7 +30,7 @@ public class WhichThread {
 
         TimeUnit.MILLISECONDS.sleep(100);
 
-        // just(main) - flatMap(cache/new[if switch thread]) - map(new) - subscribe(new)
+        // just(main) - flatMap(cache/new[if switch thread]) - map(new) - subscribe(cache)
         Single.just(instance.getString()).flatMap(instance::flatMap).subscribeOn(Schedulers.io()).map(item -> {
             System.out.printf("map + %s run on thread: %s%n", item, Thread.currentThread().getName());
             return item;
