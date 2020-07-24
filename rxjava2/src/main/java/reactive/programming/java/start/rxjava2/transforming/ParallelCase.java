@@ -1,10 +1,9 @@
 package reactive.programming.java.start.rxjava2.transforming;
 
-import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Single;
 import io.reactivex.schedulers.Schedulers;
-import io.reactivex.subjects.ReplaySubject;
+import io.reactivex.subjects.SingleSubject;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -24,51 +23,51 @@ import java.util.stream.IntStream;
  */
 public class ParallelCase {
     public static void main(String[] args) throws Exception {
-        new ParallelCase().parallelTest().subscribe(item -> {
+        new ParallelCase().parallelTest().subscribe(size -> {
             System.out.println("----------------------------------------------");
-            System.out.printf("Already done size %d, on thread: %s", item.size(), Thread.currentThread().getName());
+            System.out.printf("Already done size %d, on thread: %s%n", size, Thread.currentThread().getName());
         });
 
         TimeUnit.MILLISECONDS.sleep(1000);
     }
 
-    Single<Integer> rpcCall(Integer item) {
-        return Single.just(item).map(item2 -> {
-            System.out.printf("%d execute at: %s on thread: %s%n", item,
+    Single<Integer> rpcCall(Integer value) {
+        return Single.just(value).map(item -> {
+            System.out.printf("%d execute at: %s on thread: %s%n", value,
                 LocalTime.now().format(DateTimeFormatter.ofPattern("ss.SSS")), Thread.currentThread().getName());
 
-            if (item2 <= 5) {
-                TimeUnit.MILLISECONDS.sleep(item2 * 100);
+            if (item <= 5) {
+                TimeUnit.MILLISECONDS.sleep(item * 100);
             }
 
-            if (item2 >= 15) {
-                throw new RuntimeException(String.valueOf(item2 * 10));
+            if (item >= 15) {
+                throw new RuntimeException(String.valueOf(item * 10));
             }
-            return item2;
+            return item;
         }).onErrorReturn(throwable -> {
             return Integer.valueOf(throwable.getMessage());
         });
     }
 
-    Flowable<List<Integer>> parallelTest() {
-        ReplaySubject<List<Integer>> publishSubject = ReplaySubject.create();
+    Flowable<Integer> parallelTest() {
+        SingleSubject<Integer> singleSubject = SingleSubject.create();
 
-        List<Integer> requestList = IntStream.range(0, 20).boxed().collect(Collectors.toList());
+        List<Integer> requestList = IntStream.range(0, 10).boxed().collect(Collectors.toList());
         List<Integer> responseList = new ArrayList<>(requestList.size());
         AtomicInteger executeCount = new AtomicInteger(requestList.size());
 
-        Flowable.fromIterable(requestList).parallel().runOn(Schedulers.computation()).flatMap(item -> {
+        Flowable.fromIterable(requestList).parallel().runOn(Schedulers.io()).flatMap(item -> {
             return rpcCall(item).toFlowable();
         }).sequential().subscribe(item -> {
             System.out.printf("%d done at: %s on thread: %s%n", item,
                 LocalTime.now().format(DateTimeFormatter.ofPattern("ss.SSS")), Thread.currentThread().getName());
             responseList.add(item);
             if (executeCount.decrementAndGet() < 1) {
-                publishSubject.onNext(responseList);
+                System.out.printf("all items: %s, on thread: %s%n", responseList, Thread.currentThread().getName());
+                singleSubject.onSuccess(responseList.size());
             }
         });
 
-        System.out.println("publishSubject.subscribe");
-        return publishSubject.toFlowable(BackpressureStrategy.MISSING);
+        return singleSubject.toFlowable();
     }
 }
